@@ -48,22 +48,38 @@ export default function AdminPage() {
   async function createPartnerAccount() {
     if (!partnerEmail || !partnerPassword) return;
 
-    const { error } = await supabase.auth.signUp({
+    // Re-verify admin role before sensitive operation
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data: profileData } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single();
+
+    if (profileData?.role !== 'admin') {
+      setSuccess('Access denied. Admin only.');
+      return;
+    }
+
+    const { error } = await supabase.auth.admin.createUser({
       email: partnerEmail,
       password: partnerPassword,
-      options: {
-        data: {
-          display_name: settings?.her_display_name || 'Partner',
-        },
+      user_metadata: {
+        display_name: settings?.her_display_name || 'Partner',
       },
+      email_confirm: false,
     });
 
-    if (!error) {
+    if (error) {
+      setSuccess('Error: ' + error.message);
+    } else {
       setSuccess(`Account created for ${partnerEmail}. Share credentials securely.`);
       setPartnerEmail('');
       setPartnerPassword('');
-    } else {
-      setSuccess('Error: ' + error.message);
     }
   }
 

@@ -5,12 +5,36 @@ import { createClient } from '@/lib/supabase/client';
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<any>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState(false);
   const supabase = createClient();
 
   useEffect(() => {
     async function loadSettings() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+
+      // Verify admin role
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single();
+
+      if (profileData?.role !== 'admin') {
+        setIsAdmin(false);
+        setLoading(false);
+        return;
+      }
+
+      setIsAdmin(true);
+
       const { data } = await supabase
         .from('app_settings')
         .select('*')
@@ -41,6 +65,17 @@ export default function SettingsPage() {
 
   if (loading) {
     return <main className="p-8 text-center text-muted">Loading...</main>;
+  }
+
+  if (!isAdmin) {
+    return (
+      <main className="p-8 text-center text-muted">
+        Settings are admin-only.{' '}
+        <a href="/admin" className="text-accent underline">
+          Go to Admin Panel
+        </a>
+      </main>
+    );
   }
 
   return (
