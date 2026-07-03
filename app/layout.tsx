@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import { Navbar } from '@/components/layout/Navbar';
 
 export const metadata: Metadata = {
   title: 'Us — I Miss You',
@@ -14,7 +15,8 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="min-h-screen bg-background text-white">
-        {children}
+        <Navbar />
+        <div className="max-w-6xl mx-auto">{children}</div>
       </body>
     </html>
   );
