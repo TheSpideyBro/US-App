@@ -9,6 +9,10 @@ export default function GalleryPage() {
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
 
+  function isSafeUrl(url: string): boolean {
+    return url.startsWith('https://') || url.startsWith('http://');
+  }
+
   useEffect(() => {
     async function loadPhotos() {
       const { data } = await supabase
@@ -16,10 +20,12 @@ export default function GalleryPage() {
         .select('photo_url, text, created_at')
         .not('photo_url', 'is', null);
 
-      const mapped = (data || []).map((e: any) => ({
-        url: e.photo_url,
-        caption: e.text.substring(0, 60) + '...',
-      }));
+      const mapped = (data || [])
+        .filter((e: any) => isSafeUrl(e.photo_url))
+        .map((e: any) => ({
+          url: e.photo_url,
+          caption: e.text.substring(0, 60) + '...',
+        }));
       setPhotos(mapped);
       setLoading(false);
     }
