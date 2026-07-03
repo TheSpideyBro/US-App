@@ -43,13 +43,16 @@ export function EntryForm({ dayNumber, onSuccess }: EntryFormProps) {
     // Upload photo if present
     let photoUrl: string | undefined;
     if (photoFile) {
+      // Sanitize filename to prevent path traversal
+      const safeName = photoFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const uploadPath = `${user.id}/${Date.now()}-${safeName}`;
       const { error: uploadError } = await supabase.storage
         .from('photos')
-        .upload(`${user.id}/${Date.now()}-${photoFile.name}`, photoFile);
+        .upload(uploadPath, photoFile);
       if (!uploadError) {
         const { data: photoData } = supabase.storage
           .from('photos')
-          .getPublicUrl(`${user.id}/${Date.now()}-${photoFile.name}`);
+          .getPublicUrl(uploadPath);
         photoUrl = photoData.publicUrl;
       }
     }
