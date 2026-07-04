@@ -16,27 +16,19 @@ export default function DashboardPage() {
   useEffect(() => {
     async function loadData() {
       // Fetch app settings
-      const { data: settingsData, error: settingsError } = await supabase
+      const { data: settingsData } = await supabase
         .from('app_settings')
         .select('*')
         .eq('id', 1)
         .single();
-
-      console.log('Settings data:', settingsData);
-      console.log('Settings error:', settingsError);
-
       setSettings(settingsData);
 
       // Fetch recent entries
-      const { data: entriesData, error: entriesError } = await supabase
+      const { data: entriesData } = await supabase
         .from('entries')
         .select('*')
         .order('created_at', { ascending: false })
         .limit(3);
-
-      console.log('Entries data:', entriesData);
-      console.log('Entries error:', entriesError);
-
       setEntries(entriesData || []);
 
       setLoading(false);
@@ -54,16 +46,7 @@ export default function DashboardPage() {
   if (!settings) {
     return (
       <main className="p-8 text-center text-muted">
-        <p>No settings found. Contact admin.</p>
-        <details className="mt-4 text-left max-w-md mx-auto">
-          <summary className="cursor-pointer text-accent">Debug info (click to expand)</summary>
-          <pre className="mt-2 p-3 bg-background rounded text-xs overflow-auto whitespace-pre-wrap">
-            {JSON.stringify({
-              settingsData: settings,
-              entriesCount: entries.length,
-            }, null, 2)}
-          </pre>
-        </details>
+        No settings found. Contact admin.
       </main>
     );
   }
