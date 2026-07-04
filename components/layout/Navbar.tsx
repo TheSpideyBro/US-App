@@ -13,6 +13,7 @@ const navItems = [
   { href: '/voices', label: 'Voices' },
   { href: '/moods', label: 'Moods' },
   { href: '/letters', label: 'Letters' },
+  { href: '/export', label: 'Export' },
 ];
 
 export function Navbar() {
@@ -49,6 +50,11 @@ export function Navbar() {
         </div>
 
         <div className="flex items-center gap-3">
+          <Link href="/entry/new">
+            <Button variant="primary" size="sm">
+              ✍️ New Entry
+            </Button>
+          </Link>
           <button
             className="md:hidden text-white"
             onClick={() => setMobileOpen(!mobileOpen)}
@@ -77,6 +83,11 @@ export function Navbar() {
               {item.label}
             </Link>
           ))}
+          <Link href="/entry/new" onClick={() => setMobileOpen(false)}>
+            <Button variant="primary" size="sm" className="w-full mt-2">
+              ✍️ New Entry
+            </Button>
+          </Link>
         </div>
       )}
     </nav>

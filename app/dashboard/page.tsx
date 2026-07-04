@@ -61,12 +61,19 @@ export default function DashboardPage() {
       <TogetherCounter togetherSince={settings.together_since} />
 
       <QuickStats
-        entryCount={30}
-        photoCount={12}
-        voiceCount={5}
+        entryCount={entries.length}
+        photoCount={entries.filter((e) => e.photo_url).length}
+        voiceCount={entries.filter((e) => e.voice_url).length}
       />
 
-      <RecentEntries entries={entries} />
+      <div className="flex flex-col items-center gap-4">
+        <RecentEntries entries={entries} />
+        <a href="/entry/new">
+          <button className="bg-accent px-8 py-3 rounded-xl font-semibold text-lg hover:opacity-90 transition shadow-lg shadow-accent/20">
+            ✍️ Write a New Entry
+          </button>
+        </a>
+      </div>
     </main>
   );
 }
