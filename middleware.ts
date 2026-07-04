@@ -18,10 +18,6 @@ export async function middleware(request: NextRequest) {
           return request.cookies.getAll();
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value)
-          );
-          response = NextResponse.next({ request });
           cookiesToSet.forEach(({ name, value, options }) =>
             response.cookies.set(name, value, options)
           );
@@ -32,8 +28,11 @@ export async function middleware(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser();
 
-  // Protect all routes except login
-  if (!user && request.nextUrl.pathname !== '/login') {
+  // Protect all routes except login and public assets
+  const protectedRoutes = ['/dashboard', '/timeline', '/entry', '/gallery', '/voices', '/moods', '/letters', '/export', '/admin', '/settings'];
+  const isProtectedRoute = protectedRoutes.some(route => request.nextUrl.pathname.startsWith(route));
+
+  if (isProtectedRoute && !user) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
@@ -46,5 +45,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|gif|svg|webp)$).*)'],
 };
