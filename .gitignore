@@ -28,3 +28,6 @@ Thumbs.db
 
 # SDD (development scratch)
 .superpowers/
+
+# AI handoff (internal context, never commit)
+handoff.md
