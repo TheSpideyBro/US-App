@@ -24,12 +24,15 @@ export function Navbar() {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userName, setUserName] = useState('');
-  const [unreadMessages, setUnreadMessages] = useState(0);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [loading, setLoading] = useState(true);
   const supabase = createClient();
 
   useEffect(() => {
-    async function loadUser() {
+    async function checkAuth() {
       const { data: { user } } = await supabase.auth.getUser();
+      setIsLoggedIn(!!user);
+
       if (user) {
         const { data: profile } = await supabase
           .from('profiles')
@@ -38,100 +41,113 @@ export function Navbar() {
           .single();
         setUserName(profile?.display_name || user.email?.split('@')[0] || '');
       }
+
+      setLoading(false);
     }
-    loadUser();
+    checkAuth();
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsLoggedIn(!!session?.user);
+      if (session?.user) {
+        setUserName(session.user.email?.split('@')[0] || '');
+      } else {
+        setUserName('');
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, [supabase]);
-
-  // Subscribe to unread messages count
-  useEffect(() => {
-    if (pathname !== '/chat') return;
-
-    const channel = supabase
-      .channel('chat-presence')
-      .on('presence', { event: 'sync' }, () => {
-        const state = channel.presenceState();
-        const participants = Object.keys(state).length;
-        setUnreadMessages(participants > 1 ? 1 : 0);
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [supabase, pathname]);
 
   async function handleLogout() {
     await supabase.auth.signOut();
     window.location.href = '/login';
   }
 
+  if (loading) return null;
+
   return (
     <nav className="sticky top-0 z-50 glass border-b border-white/5">
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <Link href="/dashboard" className="flex items-center gap-2">
+          <Link href={isLoggedIn ? "/dashboard" : "/"} className="flex items-center gap-2">
             <span className="text-2xl animate-heartbeat">💕</span>
             <span className="text-xl font-bold text-accent">Us</span>
           </Link>
 
-          {/* Desktop Nav */}
-          <div className="hidden xl:flex items-center gap-1">
-            {navItems.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                  pathname === item.href
-                    ? 'bg-accent/15 text-accent'
-                    : 'text-muted hover:text-white hover:bg-white/5'
-                }`}
-              >
-                {item.icon}
-                {item.label}
-              </Link>
-            ))}
-          </div>
+          {/* Desktop Nav — only show if logged in */}
+          {isLoggedIn && (
+            <div className="hidden xl:flex items-center gap-1">
+              {navItems.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                    pathname === item.href
+                      ? 'bg-accent/15 text-accent'
+                      : 'text-muted hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  {item.icon}
+                  {item.label}
+                </Link>
+              ))}
+            </div>
+          )}
 
           {/* Tablet Nav (icons only) */}
-          <div className="hidden xl:flex items-center gap-2">
-            <Link href="/entry/new">
-              <Button variant="primary" size="sm" className="flex items-center gap-1.5">
-                <Plus className="w-4 h-4" />
-                New Entry
-              </Button>
-            </Link>
-          </div>
+          {isLoggedIn && (
+            <div className="hidden xl:flex items-center gap-2">
+              <Link href="/entry/new">
+                <Button variant="primary" size="sm" className="flex items-center gap-1.5">
+                  <Plus className="w-4 h-4" />
+                  New Entry
+                </Button>
+              </Link>
+            </div>
+          )}
 
           {/* Right side */}
           <div className="flex items-center gap-2 sm:gap-3">
-            {userName && (
+            {isLoggedIn && userName && (
               <span className="hidden sm:block text-xs text-muted">
                 Hi, {userName} 👋
               </span>
             )}
-            <Link href="/entry/new">
-              <button className="sm:hidden bg-accent hover:bg-accent-hover w-10 h-10 rounded-xl flex items-center justify-center transition-all hover:scale-105">
-                <Plus className="w-5 h-5" />
-              </button>
-            </Link>
-            <button
-              className="md:hidden text-white p-2"
-              onClick={() => setMobileOpen(!mobileOpen)}
-              aria-label="Toggle menu"
-            >
-              {mobileOpen ? <X size={20} /> : <Menu size={20} />}
-            </button>
-            <Button variant="ghost" size="sm" onClick={handleLogout} className="hidden md:flex">
-              <LogOut className="w-4 h-4 mr-1" />
-              Logout
-            </Button>
+            {isLoggedIn && (
+              <>
+                <Link href="/entry/new">
+                  <button className="sm:hidden bg-accent hover:bg-accent-hover w-10 h-10 rounded-xl flex items-center justify-center transition-all hover:scale-105">
+                    <Plus className="w-5 h-5" />
+                  </button>
+                </Link>
+                <button
+                  className="md:hidden text-white p-2"
+                  onClick={() => setMobileOpen(!mobileOpen)}
+                  aria-label="Toggle menu"
+                >
+                  {mobileOpen ? <X size={20} /> : <Menu size={20} />}
+                </button>
+                <Button variant="ghost" size="sm" onClick={handleLogout} className="hidden md:flex">
+                  <LogOut className="w-4 h-4 mr-1" />
+                  Logout
+                </Button>
+              </>
+            )}
+            {!isLoggedIn && (
+              <Link href="/login">
+                <Button variant="primary" size="sm">
+                  Login
+                </Button>
+              </Link>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Mobile Nav */}
-      {mobileOpen && (
+      {/* Mobile Nav — only show if logged in */}
+      {isLoggedIn && mobileOpen && (
         <div className="md:hidden border-t border-white/5 bg-card/95 backdrop-blur-md animate-fade-in">
           <div className="px-4 py-4 space-y-1">
             {navItems.map((item) => (
