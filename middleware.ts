@@ -29,7 +29,7 @@ export async function middleware(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
 
   // Protect all routes except login and public assets
-  const protectedRoutes = ['/dashboard', '/timeline', '/entry', '/gallery', '/voices', '/moods', '/letters', '/export', '/admin', '/settings'];
+  const protectedRoutes = ['/dashboard', '/timeline', '/entry', '/gallery', '/voices', '/moods', '/letters', '/export', '/admin', '/settings', '/album', '/anniversaries', '/chat'];
   const isProtectedRoute = protectedRoutes.some(route => request.nextUrl.pathname.startsWith(route));
 
   if (isProtectedRoute && !user) {
