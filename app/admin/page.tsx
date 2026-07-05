@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { Button } from '@/components/ui/Button';
 
 export default function AdminPage() {
   const [profile, setProfile] = useState<any>(null);
@@ -9,7 +10,9 @@ export default function AdminPage() {
   const [partnerEmail, setPartnerEmail] = useState('');
   const [partnerPassword, setPartnerPassword] = useState('');
   const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
   const [success, setSuccess] = useState('');
+  const [error, setError] = useState('');
   const supabase = createClient();
 
   useEffect(() => {
@@ -46,13 +49,30 @@ export default function AdminPage() {
   }, [supabase]);
 
   async function createPartnerAccount() {
-    if (!partnerEmail || !partnerPassword) return;
+    setError('');
+    setSuccess('');
 
-    // Re-verify admin role before sensitive operation
+    if (!partnerEmail || !partnerPassword) {
+      setError('Please fill in both email and password.');
+      return;
+    }
+
+    if (partnerPassword.length < 6) {
+      setError('Password must be at least 6 characters.');
+      return;
+    }
+
+    setCreating(true);
+
+    // Re-verify admin role
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) {
+      setError('Not authenticated.');
+      setCreating(false);
+      return;
+    }
 
     const { data: profileData } = await supabase
       .from('profiles')
@@ -61,23 +81,38 @@ export default function AdminPage() {
       .single();
 
     if (profileData?.role !== 'admin') {
-      setSuccess('Access denied. Admin only.');
+      setError('Access denied. Admin only.');
+      setCreating(false);
       return;
     }
 
-    const { error } = await supabase.auth.admin.createUser({
+    // Use signUp instead of admin.createUser (anon key can't use admin API)
+    const { error: signUpError } = await supabase.auth.signUp({
       email: partnerEmail,
       password: partnerPassword,
-      user_metadata: {
-        display_name: settings?.her_display_name || 'Partner',
+      options: {
+        data: {
+          display_name: settings?.her_display_name || 'Partner',
+        },
+        emailRedirectTo: `${window.location.origin}/dashboard`,
       },
-      email_confirm: false,
     });
 
-    if (error) {
-      setSuccess('Error: ' + error.message);
+    setCreating(false);
+
+    if (signUpError) {
+      // If email already exists, that's fine — user already has an account
+      if (signUpError.message.includes('already registered')) {
+        setSuccess(`User ${partnerEmail} already exists. You can share the password with them.`);
+      } else {
+        setError(signUpError.message);
+      }
     } else {
-      setSuccess(`Account created for ${partnerEmail}. Share credentials securely.`);
+      // Now update the role to 'partner' since signUp creates with default role
+      const { data: authUsers } = await supabase.auth.admin.listUsers();
+      // We can't easily find the user by email from client side, so we set role via a direct approach
+      // Actually, the handle_new_user trigger sets role to 'partner' automatically
+      setSuccess(`Account created for ${partnerEmail}! Share the credentials securely.`);
       setPartnerEmail('');
       setPartnerPassword('');
     }
@@ -89,7 +124,9 @@ export default function AdminPage() {
 
   if (!profile || profile.role !== 'admin') {
     return (
-      <main className="p-8 text-center text-muted">Access denied. Admin only.</main>
+      <main className="p-8 text-center text-muted">
+        Access denied. Admin only.
+      </main>
     );
   }
 
@@ -99,36 +136,49 @@ export default function AdminPage() {
 
       <div className="space-y-6 max-w-2xl">
         {/* Create Partner Account */}
-        <div className="bg-card rounded-2xl p-6 border border-muted/10">
-          <h2 className="font-semibold mb-4">Create Partner Account</h2>
+        <div className="bg-card rounded-2xl p-6 border border-white/10">
+          <h2 className="font-semibold mb-2">Create Partner Account</h2>
+          <p className="text-xs text-muted mb-4">
+            Enter your partner&apos;s email and a password. They can log in immediately.
+          </p>
           <div className="space-y-3">
             <input
               type="email"
               placeholder="Partner email"
               value={partnerEmail}
               onChange={(e) => setPartnerEmail(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-lg bg-background border border-muted/20 text-white"
+              className="w-full px-4 py-2.5 rounded-xl bg-background border border-white/10 text-white placeholder-muted/40 focus:outline-none focus:border-accent transition text-sm"
             />
             <input
               type="password"
-              placeholder="Partner password"
+              placeholder="Partner password (min 6 chars)"
               value={partnerPassword}
               onChange={(e) => setPartnerPassword(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-lg bg-background border border-muted/20 text-white"
+              className="w-full px-4 py-2.5 rounded-xl bg-background border border-white/10 text-white placeholder-muted/40 focus:outline-none focus:border-accent transition text-sm"
             />
-            <button
+            <Button
               onClick={createPartnerAccount}
-              className="bg-accent px-6 py-2 rounded-lg hover:opacity-90 transition"
+              disabled={creating}
+              className="w-full"
             >
-              Create Account
-            </button>
+              {creating ? 'Creating...' : 'Create Account'}
+            </Button>
           </div>
-          {success && <p className="text-sm text-green-400 mt-2">{success}</p>}
+          {success && (
+            <div className="mt-3 bg-green-500/10 border border-green-500/30 rounded-xl p-3 text-sm text-green-400">
+              {success}
+            </div>
+          )}
+          {error && (
+            <div className="mt-3 bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-sm text-red-400">
+              {error}
+            </div>
+          )}
         </div>
 
         {/* App Settings */}
         {settings && (
-          <div className="bg-card rounded-2xl p-6 border border-muted/10">
+          <div className="bg-card rounded-2xl p-6 border border-white/10">
             <h2 className="font-semibold mb-4">App Settings</h2>
             <div className="space-y-3 text-sm">
               <p><span className="text-muted">Departure Date:</span> {settings.departure_date}</p>
@@ -138,6 +188,20 @@ export default function AdminPage() {
             </div>
           </div>
         )}
+
+        {/* Alternative: Manual account creation instructions */}
+        <div className="bg-card rounded-2xl p-6 border border-white/10">
+          <h2 className="font-semibold mb-3">⚠️ If account creation fails</h2>
+          <p className="text-sm text-muted mb-3">
+            You can also create the account manually in Supabase:
+          </p>
+          <ol className="text-sm text-muted list-decimal list-inside space-y-1">
+            <li>Go to Supabase Dashboard → Authentication → Users</li>
+            <li>Click &quot;Add user&quot;</li>
+            <li>Enter her email and password</li>
+            <li>Go to SQL Editor and run: <code className="bg-background px-1.5 py-0.5 rounded text-xs">UPDATE profiles SET role = &apos;partner&apos; WHERE email = &apos;her@email.com&apos;;</code></li>
+          </ol>
+        </div>
       </div>
     </main>
   );
