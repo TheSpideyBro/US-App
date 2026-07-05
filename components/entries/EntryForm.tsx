@@ -29,11 +29,11 @@ export function EntryForm({ dayNumber, onSuccess, herName = 'her' }: EntryFormPr
   const [voiceUrl, setVoiceUrl] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
   const [charCount, setCharCount] = useState(0);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const moodData = MOODS.find((m) => m.value === mood) || MOODS[0];
   const moodEmoji = moodData.emoji;
@@ -52,64 +52,94 @@ export function EntryForm({ dayNumber, onSuccess, herName = 'her' }: EntryFormPr
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!text.trim()) return;
+    setErrorMsg('');
+
+    if (!text.trim()) {
+      setErrorMsg('Please write something before saving.');
+      return;
+    }
+
     setLoading(true);
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      setErrorMsg('Not authenticated. Please log in again.');
+      setLoading(false);
+      return;
+    }
 
-    // Upload photo if present
     let photoUrl: string | undefined;
-    if (photoFile) {
-      const safeName = photoFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-      const uploadPath = `${user.id}/${Date.now()}-${safeName}`;
-      const { error: uploadError } = await supabase.storage
-        .from('photos')
-        .upload(uploadPath, photoFile);
-      if (!uploadError) {
+    let voiceUrlResult: string | undefined;
+
+    try {
+      // Upload photo if present
+      if (photoFile) {
+        const safeName = photoFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const uploadPath = `${user.id}/${Date.now()}-${safeName}`;
+        const { error: uploadError } = await supabase.storage
+          .from('photos')
+          .upload(uploadPath, photoFile);
+        if (uploadError) {
+          console.error('Photo upload error:', uploadError);
+          setErrorMsg('Failed to upload photo: ' + uploadError.message);
+          setLoading(false);
+          return;
+        }
         const { data: photoData } = supabase.storage
           .from('photos')
           .getPublicUrl(uploadPath);
-        photoUrl = photoData.publicUrl;
+        photoUrl = photoData?.publicUrl;
       }
-    }
 
-    // Upload voice if present
-    let voiceUrlResult: string | undefined;
-    if (voiceFile) {
-      const uploadPath = `${user.id}/${Date.now()}-voice.webm`;
-      const { error: uploadError } = await supabase.storage
-        .from('voice-notes')
-        .upload(uploadPath, voiceFile);
-      if (!uploadError) {
+      // Upload voice if present
+      if (voiceFile) {
+        const uploadPath = `${user.id}/${Date.now()}-voice.webm`;
+        const { error: uploadError } = await supabase.storage
+          .from('voice-notes')
+          .upload(uploadPath, voiceFile);
+        if (uploadError) {
+          console.error('Voice upload error:', uploadError);
+          setErrorMsg('Failed to upload voice note: ' + uploadError.message);
+          setLoading(false);
+          return;
+        }
         const { data: voiceData } = supabase.storage
           .from('voice-notes')
           .getPublicUrl(uploadPath);
-        voiceUrlResult = voiceData.publicUrl;
+        voiceUrlResult = voiceData?.publicUrl;
       }
-    }
 
-    // Insert entry
-    const { error } = await supabase.from('entries').insert({
-      user_id: user.id,
-      day_number: dayNumber,
-      text: text.trim(),
-      mood,
-      mood_emoji: moodEmoji,
-      photo_url: photoUrl || null,
-      voice_url: voiceUrlResult || null,
-    });
+      // Insert entry
+      const { error: insertError } = await supabase.from('entries').insert({
+        user_id: user.id,
+        day_number: dayNumber,
+        text: text.trim(),
+        mood,
+        mood_emoji: moodEmoji,
+        photo_url: photoUrl || null,
+        voice_url: voiceUrlResult || null,
+      });
 
-    setLoading(false);
-    if (!error) {
+      if (insertError) {
+        console.error('Insert error:', insertError);
+        setErrorMsg('Failed to save entry: ' + insertError.message);
+        setLoading(false);
+        return;
+      }
+
+      // Success — reset and redirect
       setText('');
       setPhotoFile(null);
       setPhotoPreview(null);
       setVoiceFile(null);
       setVoiceUrl(null);
+      setLoading(false);
       onSuccess();
+
+    } catch (err: any) {
+      console.error('Unexpected error:', err);
+      setErrorMsg('Something went wrong: ' + (err.message || 'Unknown error'));
+      setLoading(false);
     }
   }
 
@@ -132,6 +162,9 @@ export function EntryForm({ dayNumber, onSuccess, herName = 'her' }: EntryFormPr
 
       mediaRecorder.start();
       setRecording(true);
+    }).catch((err) => {
+      console.error('Microphone error:', err);
+      alert('Could not access microphone. Please allow mic permission.');
     });
   }
 
@@ -154,6 +187,14 @@ export function EntryForm({ dayNumber, onSuccess, herName = 'her' }: EntryFormPr
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6 max-w-2xl mx-auto p-4 sm:p-6">
+      {/* Error Message */}
+      {errorMsg && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-red-400 text-sm">
+          {errorMsg}
+          <button type="button" onClick={() => setErrorMsg('')} className="float-right text-red-400 hover:text-white">✕</button>
+        </div>
+      )}
+
       {/* Day & Time */}
       <div className="flex items-center justify-between">
         <div>
@@ -208,21 +249,19 @@ export function EntryForm({ dayNumber, onSuccess, herName = 'her' }: EntryFormPr
       {/* Photo Upload */}
       <div>
         <p className="text-sm text-muted mb-3">Add a Photo</p>
-        {!photoFile ? (
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            onChange={(e) => {
-              const file = (e.target as HTMLInputElement).files?.[0];
-              if (file) {
-                setPhotoFile(file);
-                setPhotoPreview(URL.createObjectURL(file));
-              }
-            }}
-            className="hidden"
-          />
-        ) : null}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={(e) => {
+            const file = (e.target as HTMLInputElement).files?.[0];
+            if (file) {
+              setPhotoFile(file);
+              setPhotoPreview(URL.createObjectURL(file));
+            }
+          }}
+          className="hidden"
+        />
         {photoPreview ? (
           <div className="relative group">
             <img
@@ -272,7 +311,7 @@ export function EntryForm({ dayNumber, onSuccess, herName = 'her' }: EntryFormPr
             <div className="w-10 h-10 rounded-full bg-accent/20 flex items-center justify-center flex-shrink-0">
               <Play className="w-4 h-4 text-accent" />
             </div>
-            <audio ref={audioRef} src={voiceUrl || undefined} controls className="flex-1 h-8" />
+            <audio src={voiceUrl || undefined} controls className="flex-1 h-8" />
             <button
               type="button"
               onClick={removeVoice}
